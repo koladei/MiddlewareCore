@@ -1,0 +1,63 @@
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+/**
+ * Implement hook_menu().
+ */
+function mware_menu() {
+    $items = array();
+
+    $items['admin/config/administration/mware'] = array(
+        'title' => 'Middleware',
+        'description' => 'Use this page to provide settings for the Middleware application',
+        'page callback' => 'drupal_get_form',
+        'page arguments' => array('mware_admin'),
+        'access arguments' => array('mware administer settings'),
+        'file path' => drupal_get_path('module', 'mware') . '/forms',
+        'file' => 'admin.inc',
+        'type' => MENU_NORMAL_ITEM,
+    );
+
+    return $items;
+}
+
+/**
+ * Implements hook_permission
+ * @return array
+ */
+function mware_permission() {
+    $permission = [
+        'mware administer settings' => [
+            'title' => t('Administer settings'),
+            'description' => t('Manage Middleware and it\'s dependencies\' settings.'),
+        ],
+    ];
+    return $permission;
+}
+
+/**
+ * Implements hook_library
+ * @return array
+ */
+function mware_library() {
+    $libraries = array();
+
+    return $libraries;
+}
+
+/**
+ * Implements hook_ctools_plugin_api
+ * @param type $owner
+ * @param type $api
+ * @return type
+ */
+function mware_ctools_plugin_api($owner, $api) {
+    if ($owner == 'services' && $api == 'services') {
+        return array(
+            'version' => 3,
+            'file' => 'endpoints.inc', // Optional parameter to indicate the file name to load.
+            'path' => drupal_get_path('module', 'mware'), // If specifying the file key, path is required.
+        );
+    }
+}
