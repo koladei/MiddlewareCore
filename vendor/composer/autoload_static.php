@@ -13,6 +13,14 @@ class ComposerStaticInit890c87649b4d7a5c6a0829e3d3840f4c
     );
 
     public static $prefixLengthsPsr4 = array (
+        'c' => 
+        array (
+            'cURL\\' => 5,
+        ),
+        'S' => 
+        array (
+            'Symfony\\Component\\EventDispatcher\\' => 34,
+        ),
         'P' => 
         array (
             'Psr\\Http\\Message\\' => 17,
@@ -26,6 +34,14 @@ class ComposerStaticInit890c87649b4d7a5c6a0829e3d3840f4c
     );
 
     public static $prefixDirsPsr4 = array (
+        'cURL\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/stil/curl-easy/src',
+        ),
+        'Symfony\\Component\\EventDispatcher\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/symfony/event-dispatcher',
+        ),
         'Psr\\Http\\Message\\' => 
         array (
             0 => __DIR__ . '/..' . '/psr/http-message/src',

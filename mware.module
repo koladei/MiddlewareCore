@@ -2,6 +2,14 @@
 
 require __DIR__ . '/vendor/autoload.php';
 
+spl_autoload_register(function ($class) {
+
+    $path = "lib";
+    $pa = str_replace('\\', DIRECTORY_SEPARATOR, "{$path}\\{$class}" . '.php');
+//    echo $pa;
+    @include $pa;
+});
+
 /**
  * Implement hook_menu().
  */
@@ -60,4 +68,54 @@ function mware_ctools_plugin_api($owner, $api) {
             'path' => drupal_get_path('module', 'mware'), // If specifying the file key, path is required.
         );
     }
+}
+
+/**
+ * Processes a URI rquest.
+ * @param string $url
+ * @param array $settings
+ */
+function mware_http_request($url, $settings = array()) {
+
+    $request = new \cURL\Request($url);
+    $request->getOptions()
+            ->set(CURLOPT_TIMEOUT, 10)->set(CURLOPT_RETURNTRANSFER, true);
+
+    if (isset($settings['options'])) {
+        $default = $settings['options'];
+        foreach ($default as $key => $value) {
+            $request->getOptions()->set($key, $value);
+        }
+    }
+
+    //Add the listener
+    $request->addListener('complete', $settings['callback']);
+
+    while ($request->socketPerform()) {
+        $request->socketSelect();
+    }
+}
+
+/**
+ * Processes a URI rquest.
+ * @param string $url
+ * @param array $settings
+ */
+function mware_blocking_http_request($url, $settings = array()) {
+
+    $request = new \cURL\Request($url);
+    $request->getOptions()
+            ->set(CURLOPT_TIMEOUT, 10)
+            ->set(CURLOPT_RETURNTRANSFER, true);
+
+    // Set other request options
+    if (isset($settings['options'])) {
+        $default = $settings['options'];
+        foreach ($default as $key => $value) {
+            $request->getOptions()->set($key, $value);
+        }
+    }
+
+    $response = $request->send();
+    return $response;
 }
