@@ -103,13 +103,12 @@ function mware_default_services_endpoint() {
     
     //Load all SOAP endpoint resources
     drupal_alter('mware_default_service_operations', $endpoint_soap->resources);
-
     
     $endpoint_rest->debug = 0;
     $endpoints[$prefered_name] = $endpoint_rest;
 
     $endpoint_soap->debug = 0;
-    $endpoints[$prefered_soap_name] = $endpoint_rest;
+    $endpoints[$prefered_soap_name] = $endpoint_soap;
 
     return $endpoints;
 }
