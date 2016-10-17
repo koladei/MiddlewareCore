@@ -1,6 +1,7 @@
-name = MainOne Middleware
+name = MainOne Middleware: Core
 description = Implements a webservice API that can be queried to get certain information about a customer.
 configure = admin/config/administration/mware
+dependencies[] = settings_provider
 dependencies[] = services
 dependencies[] = entity
 package = MainOne
