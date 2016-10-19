@@ -35,15 +35,15 @@ function mware_default_services_endpoint() {
                 'json' => TRUE,
                 'jsonp' => FALSE,
                 'php' => FALSE,
-                'xml' => FALSE,
+                'xml' => TRUE,
             ),
             'parsers' => array(
                 'application/json' => TRUE,
                 'application/vnd.php.serialized' => FALSE,
-                'application/xml' => FALSE,
+                'application/xml' => TRUE,
                 'multipart/form-data' => TRUE,
                 'text/xml' => FALSE,
-                'application/x-www-form-urlencoded' => FALSE,
+                'application/x-www-form-urlencoded' => TRUE,
             ),
         );
 
