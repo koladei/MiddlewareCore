@@ -1,12 +1,13 @@
 <?php
 
+include_once 'mware_entities_def.inc';
+
 require __DIR__ . '/vendor/autoload.php';
 
 spl_autoload_register(function ($class) {
 
     $path = "lib";
     $pa = str_replace('\\', DIRECTORY_SEPARATOR, "{$path}\\{$class}" . '.php');
-//    echo $pa;
     @include $pa;
 });
 
@@ -14,18 +15,61 @@ spl_autoload_register(function ($class) {
  * Implement hook_menu().
  */
 function mware_menu() {
-    $items = array();
+    $items = [];
 
-    $items['admin/config/administration/mware'] = array(
+    $items['admin/config/administration/mware'] = [
         'title' => 'Middleware',
         'description' => 'Use this page to provide settings for the Middleware application',
         'page callback' => 'drupal_get_form',
-        'page arguments' => array('mware_admin'),
-        'access arguments' => array('mware administer settings'),
+        'page arguments' => ['mware_admin'],
+        'access arguments' => ['mware administer settings'],
         'file path' => drupal_get_path('module', 'mware') . '/forms',
         'file' => 'admin.inc',
         'type' => MENU_NORMAL_ITEM,
+    ];
+
+    $items['admin/config/administration/mware/settings'] = [
+        'title' => 'Middleware',
+        'description' => 'Use this page to provide settings for the Middleware application',
+        'page callback' => 'drupal_get_form',
+        'page arguments' => ['mware_admin'],
+        'access arguments' => ['mware administer settings'],
+        'file path' => drupal_get_path('module', 'mware') . '/forms',
+        'file' => 'admin.inc',
+        'type' => MENU_DEFAULT_LOCAL_TASK,
+    ];
+
+    $items['admin/config/administration/mware/manage'] = [
+        'title' => 'Propagation Log Admin',
+        'description' => 'Manage Propagation Log structure',
+        'page callback' => 'mware_propagation_log_info',
+        'page arguments' => ['mware_propagation_log_info'],
+        'access arguments' => ['administer mware_propagation_logs'],
+        'file' => 'mware_entities_def.inc',
+        'type' => MENU_LOCAL_TASK,
+    ];
+
+    $items['mware_propagation_log/%mware_propagation_log'] = [
+        'title callback' => 'mware_propagation_log_page_title',
+        'title arguments' => [1],
+        'page callback' => 'mware_propagation_log_page_view',
+        'page arguments' => [1],
+        'access arguments' => ['view mware_propagation_logs'],
+        'type' => MENU_CALLBACK,
+    ];
+
+    $items['admin/structure/mware_propagation_logs/manage'] = array(
+        'title' => 'Middleware Event Log Admin',
+        'description' => 'Manage Middleware Event Log structure',
+        'page callback' => 'mware_propagation_log_info',
+        'access arguments' => array('administer mware_propagation_logs'),
     );
+
+    $items['mware_propagation_log/add'] = [
+        'title' => 'Add PostIT!',
+        'page callback' => 'mware_propagation_log_add',
+        'access arguments' => ['create mware_propagation_log'],
+    ];
 
     return $items;
 }
@@ -40,6 +84,13 @@ function mware_permission() {
             'title' => t('Administer settings'),
             'description' => t('Manage Middleware and it\'s dependencies\' settings.'),
         ],
+        'administer mware_propagation_logs' => [
+            'title' => t('Administer mware_propagation_logs'),
+            'restrict access' => TRUE,
+        ],
+        'view mware_propagation_log' => [
+            'title' => t('View PostIts'),
+        ]
     ];
     return $permission;
 }
@@ -49,7 +100,7 @@ function mware_permission() {
  * @return array
  */
 function mware_library() {
-    $libraries = array();
+    $libraries = [];
 
     return $libraries;
 }
@@ -62,11 +113,11 @@ function mware_library() {
  */
 function mware_ctools_plugin_api($owner, $api) {
     if ($owner == 'services' && $api == 'services') {
-        return array(
+        return [
             'version' => 3,
             'file' => 'endpoints.inc', // Optional parameter to indicate the file name to load.
             'path' => drupal_get_path('module', 'mware'), // If specifying the file key, path is required.
-        );
+        ];
     }
 }
 
@@ -75,7 +126,7 @@ function mware_ctools_plugin_api($owner, $api) {
  * @param string $url
  * @param array $settings
  */
-function mware_http_request($url, $settings = array()) {
+function mware_http_request($url, $settings = []) {
 
     $request = new \cURL\Request($url);
     $request->getOptions()
@@ -101,7 +152,7 @@ function mware_http_request($url, $settings = array()) {
  * @param string $url
  * @param array $settings
  */
-function mware_blocking_http_request($url, $settings = array()) {
+function mware_blocking_http_request($url, $settings = []) {
 
     $request = new \cURL\Request($url);
     $request->getOptions()
