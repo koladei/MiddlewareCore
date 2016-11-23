@@ -1,7 +1,8 @@
 name = MainOne Middleware: Core
 description = Implements a webservice API that can be queried to get certain information about a customer.
 configure = admin/config/administration/mware
-dependencies[] = settings_provider
+dependencies[] = salesforce_settings_provider
+dependencies[] = dynamics_ax_settings_provider
 dependencies[] = services
 dependencies[] = entity
 package = MainOne
