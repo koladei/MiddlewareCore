@@ -47,40 +47,40 @@ function mware_entity_property_info() {
 
     $info = [];
 
-//    $info['user_attempt']['properties']['id'] = [
-//        'label' => t('Project ID'),
-//        'description' => t('The ID of the project.'),
-//        'type' => 'integer',
-//        'schema field' => 'id',
-//    ];
-//
-//    $info['user_attempt']['properties']['user_id'] = [
-//        'label' => t('AD Username'),
-//        'description' => t('Name of the project.'),
-//        'type' => 'text',
-//        'schema field' => 'user_id',
-//    ];
-//
-//    $info['user_attempt']['properties']['action'] = [
-//        'label' => t('Action performed'),
-//        'description' => t('The action performed against the AD Username.'),
-//        'type' => 'text',
-//        'schema field' => 'action',
-//    ];
-//
-//    $info['user_attempt']['properties']['created'] = [
-//        'label' => t('Created'),
-//        'description' => t('When the action was attempted.'),
-//        'type' => 'date',
-//        'schema field' => 'created',
-//    ];
-//
-//    $info['user_attempt']['properties']['modified'] = [
-//        'label' => t('Modified'),
-//        'description' => t('When the action was last attempted.'),
-//        'type' => 'date',
-//        'schema field' => 'modified',
-//    ];
+    $info['mware_propagation_log']['properties']['id'] = [
+        'label' => t('Project ID'),
+        'description' => t('The ID of the project.'),
+        'type' => 'integer',
+        'schema field' => 'id',
+    ];
+
+    $info['mware_propagation_log']['properties']['attempts'] = [
+        'label' => t('Attempts'),
+        'description' => t('The number of attempts'),
+        'type' => 'integer',
+        'schema field' => 'attempts',
+    ];
+
+    $info['mware_propagation_log']['properties']['action'] = [
+        'label' => t('Action performed'),
+        'description' => t('The action performed against the AD Username.'),
+        'type' => 'text',
+        'schema field' => 'action',
+    ];
+
+    $info['mware_propagation_log']['properties']['created'] = [
+        'label' => t('Created'),
+        'description' => t('When the action was attempted.'),
+        'type' => 'date',
+        'schema field' => 'created',
+    ];
+
+    $info['mware_propagation_log']['properties']['modified'] = [
+        'label' => t('Modified'),
+        'description' => t('When the action was last attempted.'),
+        'type' => 'date',
+        'schema field' => 'modified',
+    ];
 
     return $info;
 }
@@ -103,7 +103,7 @@ function mware_propagation_log_load_multiple($ids = [], $conditions = [], $reset
 
 function mware_propagation_log_info() {
 
-    $header = ['ID', 'Event Name', 'Attempts', 'Post Content', 'Reason', 'Status', 'Created', 'Modified'];
+    $header = ['ID', 'Parent', 'Event Name', 'Attempts', 'Post Content', 'Reason', 'Status', 'Created', 'Modified'];
     $rows = [];
 
     $query = new EntityFieldQuery();
@@ -116,6 +116,7 @@ function mware_propagation_log_info() {
         foreach ($results as $result) {
             $rows[] = [
                 $result->id,
+                $result->parent,
                 l($result->event_name, 'mware_propagation_log/' . $result->id . '/edit'),
                 $result->attempts,
                 $result->post_content,
