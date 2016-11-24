@@ -53,6 +53,13 @@ function mware_entity_property_info() {
         'type' => 'integer',
         'schema field' => 'id',
     ];
+    
+    $info['mware_propagation_log']['properties']['parent'] = [
+        'label' => t('Parent ID'),
+        'description' => t('The ID of the parent.'),
+        'type' => 'integer',
+        'schema field' => 'parent',
+    ];
 
     $info['mware_propagation_log']['properties']['attempts'] = [
         'label' => t('Attempts'),
