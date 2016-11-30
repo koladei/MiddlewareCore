@@ -129,8 +129,8 @@ function mware_propagation_log_info() {
                 $result->post_content,
                 $result->status_reason,
                 $result->event_status,
-                format_date($result->created),
-                format_date($result->modified)];
+                format_date($result->created, 'custom', 'Y-m-d h:i:s'),
+                format_date($result->modified, 'custom', 'Y-m-d h:i:s')];
         }
     }
 
