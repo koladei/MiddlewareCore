@@ -114,7 +114,9 @@ function mware_propagation_log_info() {
     $rows = [];
 
     $query = new EntityFieldQuery();
-    $query->entityCondition('entity_type', 'mware_propagation_log', '=');
+    $query->entityCondition('entity_type', 'mware_propagation_log', '=')
+        ->propertyOrderBy('created', 'DESC')
+        ->range(0, 500);
     $result = $query->execute();
     if (isset($result['mware_propagation_log'])) {
         $mware_propagation_log_ids = array_keys($result['mware_propagation_log']);
