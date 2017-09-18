@@ -25,12 +25,17 @@ class Request extends EventDispatcher implements RequestInterface
      *
      * @param string $url The URL to fetch.
      */
-    public function __construct($url = null)
+    public function __construct($url = null, $ch = NULL)
     {
         if ($url !== null) {
             $this->getOptions()->set(CURLOPT_URL, $url);
         }
-        $this->ch = curl_init();
+
+        if(is_null($ch)){
+            $this->ch = curl_init();
+        } else {
+            $this->ch = $ch;
+        }
     }
     
     /**
@@ -106,14 +111,41 @@ class Request extends EventDispatcher implements RequestInterface
         if ($this->options instanceof Options) {
             $this->options->applyTo($this);
         }
+
+        $headers = [];
+        $func = function($curl, $line) use(&$headers) {
+            list($name, $value) = explode(': ', $line, 2);
+                        
+            if(isset($headers[$name])) {
+                if(!is_array($headers[$name])) {
+                    $headers[$name] = [$headers[$name]];
+                }
+
+                $headers[$name][] = $value;
+            }
+            else {
+                $headers[$name] = $value;
+            }
+        };
+
+        // $this->getOptions()->set(CURLOPT_HEADER, TRUE);
+        $this->getOptions()->set(CURLOPT_HEADERFUNCTION, $func);
+     
         $content = curl_exec($this->ch);
+        $header_size = $this->getInfo(CURLINFO_HEADER_SIZE);
         
-        $response = new Response($this, $content);
+        $response = new Response($this, $content, $headers);
         $errorCode = curl_errno($this->ch);
         if ($errorCode !== CURLE_OK) {
             $response->setError(new Error(curl_error($this->ch), $errorCode));
         }
+
         return $response;
+    }
+
+    public function getInfo($key = null)
+    {
+        return $key === null ? curl_getinfo($this->ch) : curl_getinfo($this->ch, $key);
     }
 
     /**

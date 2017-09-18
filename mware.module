@@ -140,7 +140,9 @@ function mware_http_request($url, $settings = []) {
     }
 
     //Add the listener
-    $request->addListener('complete', $settings['callback']);
+    if(isset($settings['callback'])){
+        $request->addListener('complete', $settings['callback']);
+    }
 
     while ($request->socketPerform()) {
         $request->socketSelect();
@@ -154,7 +156,7 @@ function mware_http_request($url, $settings = []) {
  */
 function mware_blocking_http_request($url, $settings = []) {
 
-    $request = new \cURL\Request($url);
+    $request = new \cURL\Request($url, isset($settings['curl_handle'])?$settings['curl_handle']:NULL);
     $request->getOptions()
             ->set(CURLOPT_TIMEOUT, 10)
             ->set(CURLOPT_RETURNTRANSFER, true);

@@ -6,6 +6,9 @@ class Response
     protected $ch;
     protected $error;
     protected $content = null;
+    protected $cookies = [];
+    protected $request;
+    protected $headers = [];
     
     /**
      * Constructs response
@@ -13,9 +16,19 @@ class Response
      * @param Request $request Request
      * @param string  $content Content of reponse
      */
-    public function __construct(Request $request, $content = null)
+    public function __construct(Request $request, $content = null, $headers = [])
     {
         $this->ch = $request->getHandle();
+        $this->request = $request;
+        $this->header = $headers;
+
+        if(!is_null($content)){
+            preg_match_all('/^Set-Cookie: \s*([^;]*)/mi', $content, $matches);
+            foreach($matches[1] as $item){
+                parse_str($item, $cookie);
+                $this->cookies = array_merge($this->cookies, $cookie);
+            }
+        }
         
         if (is_string($content)) {
             $this->content = $content;
@@ -44,6 +57,18 @@ class Response
     public function getContent()
     {
         return $this->content;
+    }
+
+    public function getHeaders(){
+        return $this->headers;
+    }
+
+    public function getHandle() {
+        return $this->ch;
+    }
+
+    public function getRequest(){
+        $this->request;
     }
     
     /**
@@ -75,5 +100,11 @@ class Response
     public function hasError()
     {
         return isset($this->error);
+    }
+
+    public function closeConnection(){
+        // if (isset($this->ch)) {
+            curl_close($this->ch);
+        // }
     }
 }
