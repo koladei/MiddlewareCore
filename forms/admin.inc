@@ -28,5 +28,28 @@ function mware_admin() {
         '#required' => TRUE,
     );
 
+    $form['general_settings']['MWARE_INSTANCE_TYPE'] = array(
+        '#type' => 'radios',
+        '#title' => t('Instance type'),
+        '#default_value' => variable_get('MWARE_INSTANCE_TYPE', 'sandbox'),
+        '#size' => 100,
+        '#maxlength' => 100,
+        '#description' => t('Define what this instance represents'),
+        '#required' => TRUE,
+        '#options' => ['sandbox' => t('Sandbox'),'staging' => t('Staging'),'production' => t('Production')],
+    );
+
+    $form['general_settings']['MWARE_INSTANCES'] = [
+        '#type' => 'fieldset',
+        '#title' => t('Related instances'),
+        '#description' => t('Relate this instance to other instances')
+    ];
+
+    $form['general_settings']['MWARE_INSTANCES']['new_instance'] = [
+        '#type' => 'button',
+        '#value' => t('Add instance'),
+        '#description' => t('Add a new instance')
+    ];
+
     return system_settings_form($form);
 }
