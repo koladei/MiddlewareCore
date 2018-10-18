@@ -1,0 +1,5 @@
+services:
+  middleware_core.path_processor:
+    class: Drupal\middleware_core\PathProcessor\MiddlewarePathProcessor
+    tags:
+      - { name: path_processor_inbound, priority: 350 }

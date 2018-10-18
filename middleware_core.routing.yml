@@ -1,0 +1,16 @@
+route_callbacks:
+  - '\Drupal\middleware_core\Routing\RouteProvider::routes'
+middleware_core.admin_settings:
+  path: '/admin/config/middleware_core'
+  defaults:
+    _form: '\Drupal\middleware_core\Form\ConfigurationForm'
+    _title: 'Middleware Configuration'
+  requirements:
+    _permission: 'administer site configuration'
+middleware_core.object_settings:
+  path: '/admin/config/middleware_core/objects'
+  defaults:
+    _form: '\Drupal\middleware_core\Form\ObjectListForm'
+    _title: 'Middleware Objects'
+  requirements:
+    _permission: 'administer site configuration'

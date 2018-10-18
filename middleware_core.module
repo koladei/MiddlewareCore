@@ -1,0 +1,15 @@
+<?php
+
+/**
+ * @file
+ * Middleware module.
+ */
+
+// \Drupal::service("router.builder")->rebuild();
+function middleware_core__get_driver($driver_name)
+{
+    $data = [];
+    Drupal::moduleHandler()->alter(['connection_driver', 'connection_driver_' . $driver_name], $data);
+    
+    return isset($data[$driver_name])?$data[$driver_name]: false;
+}

@@ -1,0 +1,16 @@
+middleware_core.admin_settings_connections: # The first plugin ID
+  route_name: middleware_core.admin_settings  
+  title: 'Connections'
+  base_route: middleware_core.admin_settings
+middleware_core.admin_settings_objects: # The first plugin ID
+  route_name: middleware_core.object_settings  
+  title: 'Objects'
+  base_route: middleware_core.admin_settings
+# middleware_core.admin_settings_connections2: # The first plugin ID
+#   route_name: middleware_core.admin_settings  
+#   title: 'Connections'
+#   base_route: middleware_core.admin_settings
+# middleware_core.admin_settings_objects2: # The first plugin ID
+#   route_name: middleware_core.object_settings  
+#   title: 'Objects'
+#   base_route: middleware_core.admin_settings

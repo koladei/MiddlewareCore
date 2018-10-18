@@ -1,0 +1,814 @@
+<?php
+
+module_load_include('module', 'mware');
+include_once str_replace('/', DIRECTORY_SEPARATOR, __DIR__ . '/MiddlewareV8Wrapper.php');
+
+require_once 'functions/functions.inc';
+require_once 'forms/admin.inc';
+// use com\mainone\middleware\bridge\MiddlewareV8Wrapper as MiddlewareV8Wrapper;
+
+
+function mware_cp_bridge__process_soap(){
+	$args = func_get_args();
+	drupal_add_http_header('content-type', 'text/xml');
+	if(count($args) > 0) {
+		$sql = mware_connection_driver__get_driver('sql');
+		$services = $sql->getItems('adhocsoapservice', 'Name,Description,Logic,WSDL,URL', "URL eq '{$args[0]}'", '', ['$all' => '1']);
+
+		if(count($services) > 0){
+			global $base_url;
+			$service = $services[0];
+			$service_url = "${base_url}/middleware-bridge/ad-hoc-soap/{$service->URL}";
+
+			try{
+				// Process the operation
+				if($_SERVER['REQUEST_METHOD'] == 'POST') {
+					$server = new \SoapServer($service_url, [
+						'soap_version' => SOAP_1_2
+						, 'encoding'=>'ISO-8859-1'
+						, 'cache_wsdl' => WSDL_CACHE_NONE
+						, 'trace' => 1
+					]);
+			
+					$server->setClass('MiddlewareV8Wrapper', $service, function(){
+						return mware_connection_driver__get_driver(...func_get_args());
+					}, function(){
+						return watchdog(...func_get_args());
+					});			
+					$server->handle();
+					return;
+				}
+
+				// Other, send the wsdl back
+				else {				
+					// echo '<?xml version="1.0" encoding="UTF-8">';
+					echo str_replace('${SERVICE_URL}', "{$service_url}", $service->WSDL);
+					return;
+				}
+			} catch(\Exception $exp){
+				echo $exp->getMessage();
+			}
+		}
+	}
+	
+	echo '<?xml version="1.0" encoding="UTF-8"?>
+		<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+		<soapenv:Body>
+		   <soapenv:Fault>
+			  <faultcode>soapenv:Server.userException</faultcode>
+			  <faultstring>ERROR (307): Invalid endpoint</faultstring>
+			  <detail>
+				 <ns1:hostname xmlns:ns1="http://xml.apache.org/axis/">MOLBMCTEST</ns1:hostname>
+			  </detail>
+		   </soapenv:Fault>
+		</soapenv:Body>
+	 </soapenv:Envelope>';
+
+	 return;
+	
+}
+
+function mware_cp_bridge__process_rest(){
+	$args = func_get_args();
+	$sub_path = [];
+	global $base_url;
+	global $user;
+
+	if($_SERVER['REQUEST_METHOD'] == 'OPTIONS'){
+		return;
+	}
+	
+	// Prepare a default response
+	$response = [
+		'status' => 'failure'		
+	];
+
+	if(count($args) > 0) {
+		$proceed = NULL;
+		$retryCount = 4;	
+
+		// Breakdown the path that was provided.
+		$c1 = [];
+		$c2 = [];
+		foreach($args as $id => $arg){
+			$cc = array_slice($args, 0, $id + 1);
+			$url = str_replace('\'', urlencode('\''), implode('/', $cc));
+			$c1[] = (object)[
+				'URL' => $url, 
+				'Params' => array_slice($args, $id + 1)
+			];
+		}
+
+		rsort($c1);
+		foreach($c1 as $x){
+			$c2[$x->URL] = $x;
+		}
+		unset($c1);
+		
+		// Get the database connection driver
+		$sql = mware_connection_driver__get_driver('sql');
+
+		$proceed = function(&$p_arg = NULL) use($sql, $user, &$proceed, &$retryCount, $c2) {	
+			try {
+				$sub_path = [];
+				
+				// Prepare a query to find possible path matches.
+				$query = implode('\',\'', array_keys($c2));
+				$query = "URL IN('{$query}')";
+				
+				$services = $sql->getItems('adhocsoapservice', 'Name,Description,Logic,URL', $query, '', ['$all' => '1']);
+				
+				// Execute the endpoint and return, its response.
+				if(count($services) > 0){
+					global $base_url;
+
+					// Store the matched service scripts in an associative array.
+					$ss = [];
+					foreach($services as $s){
+						$ss[$s->URL] = $s;
+					}
+					$ss_keys = array_keys($ss);
+
+					// Default to the first service script found.
+					$service = $services[0];
+
+					// compare the requested with the array.
+					foreach(array_keys($c2) as $url){
+						if(in_array($url, $ss_keys)){
+							$service = $ss[$url];
+							$sub_path = $c2[$url]->Params;
+							break;
+						}
+					}
+
+					// Initialize the script processor.
+					$wrapper = new MiddlewareV8Wrapper($service, function(){
+						return mware_connection_driver__get_driver(...func_get_args());
+					}, function(){
+						return watchdog(...func_get_args());
+					});
+
+					// Try converting to JSON
+					$body = NULL;
+
+					// Collect all headers
+					$headers = [];
+					foreach(getallheaders() as $name => $header){
+						$headers[strtolower($name)] = $header;
+					}
+
+					// Try converting to JSON	
+					if(!isset($headers['content-type']) || isset($headers['content-type']) && in_array('application/json', explode(';', $headers['content-type']))){
+						$body = json_decode(file_get_contents('php://input'));					
+					}
+					else { 
+						$body = file_get_contents('php://input');
+					}					
+
+					return $wrapper->{$_SERVER['REQUEST_METHOD']}([
+						'BODY' => $body
+						, 'PATH' => $sub_path
+						, 'HEADERS' => $headers
+						, 'BASE_URL' => $base_url
+						, 'CURRENT_USER' => $user
+						, 'CLEANER' => function(&$response) use(&$p_arg){
+							$p_arg = array_merge($p_arg, $response);						
+						}
+					], function(&$response) use(&$p_arg){
+						$p_arg = array_merge($p_arg, $response);						
+					});
+				} else {					
+					throw new \Exception('Sorry, the controller could not be loaded.');
+				}
+			} catch (\Exception $exp){		
+				// Maybe the data structure has changed.	
+					// echo 'About to ensure'.$controller_name.$exp->getMessage();
+				$sql->ensureDataStructure('adhocsoapservice');
+				if($retryCount > 0){
+					$retryCount = $retryCount - 1;
+					return $proceed($p_arg);
+				}
+			}
+		};
+
+		// load the code logic of the endpoint in the database
+		try {
+			$proceed($response);
+			if(!isset($response['status'])){				
+				$response['status'] = 'success';
+			}
+		} catch(\Exception $exp){
+			$response['status'] = 'failure';
+			$response['message'] = $exp->getMessage();
+		}
+	} else {
+		$response['message'] = 'Your request URL does not match any of the predefined controllers';
+	}
+	
+	// return the response
+	if(isset($response['custom_format'])){
+		foreach($response['headers'] as $name => $value){
+			if(is_string($value)){
+				drupal_add_http_header($name, $value);
+			} else if(is_array($value)){
+				foreach($value as $v){
+					drupal_add_http_header($name, $v);
+				}
+			}
+		}
+
+		// Decode the supplied data before echoing it.
+		if(!isset($response['custom_format']['encoded']) || (isset($response['custom_format']['encoded']) && $response['custom_format']['encoded'] == true))
+		{
+			echo base64_decode($response['d']);
+		} else {
+			echo ($response['d']);
+		}
+
+		return;
+	}
+	
+	drupal_add_http_header('content-type', 'application/json');
+	echo json_encode($response);
+
+	return;	
+}
+
+function mware_cp_bridge__process_soap2(){
+	$args = func_get_args();
+	$sub_path = [];
+	drupal_add_http_header('content-type', 'text/xml');
+
+	// Prepare a default response
+	$response = [
+		'status' => 'failure'		
+	];
+
+	if(count($args) > 0) {
+		$controller_name = [];
+		$proceed = NULL;
+
+		// find the base path of the endpoint;
+		foreach($args as $id => $arg){
+			if(strlen($arg)>0 && substr($arg, -1, 1) === ':'){
+				$controller_name[] = substr($arg, 0, -1);
+				$sub_path = $args;
+				$sub_path = array_slice($sub_path, $id + 1);
+				break;
+			} else {
+				$controller_name[] = $arg;
+			}
+		}
+		$controller_name = implode('/', $controller_name);
+		$retryCount = 4;	
+		
+		// Get the database connection driver
+		$sql = mware_connection_driver__get_driver('sql');
+
+		$proceed = function(&$p_arg = NULL) use($controller_name, $sub_path, $sql, &$proceed, &$retryCount) {	
+			// echo 'ACB';
+			try {
+				$services = $sql->getItems('adhocsoapservice', 'Name,Description,Logic,WSDL,URL', "URL eq '{$controller_name}'", '', ['$all' => '1']);
+
+				if(count($services) > 0){
+					global $base_url;
+					$service = $services[0];
+					$service_url = "${base_url}/soap/{$service->URL}";
+
+					try{
+						// Process the operation
+						if($_SERVER['REQUEST_METHOD'] == 'POST') {
+							$server = new \SoapServer($service_url, [
+								'soap_version' => SOAP_1_2
+								, 'encoding'=>'ISO-8859-1'
+								, 'cache_wsdl' => WSDL_CACHE_NONE
+								, 'trace' => 1
+							]);
+					
+							// echo '' . $service->Logic;
+							$server->setClass('MiddlewareV8Wrapper', $service, function(){
+								return mware_connection_driver__get_driver(...func_get_args());
+							}, function(){
+								return watchdog(...func_get_args());
+							});			
+							$server->handle();
+							return;
+						}
+
+						// Other, send the wsdl back
+						else {
+							echo str_replace('${SERVICE_URL}', "{$service_url}", $service->WSDL);
+							return;
+						}
+					} catch(\Exception $exp){
+						echo $exp->getMessage();
+					}
+				}
+			} catch (\Exception $exp){		
+				// Maybe the data structure has changed.		
+				$sql->ensureDataStructure('adhocsoapservice');
+				if($retryCount > 0){
+					$retryCount = $retryCount - 1;
+					return $proceed($p_arg);
+				}
+			}
+		};
+
+		// load the code logic of the endpoint in the database
+		try {
+			return $proceed($response);
+		} catch(\Exception $exp){
+			$response['message'] = $exp->getMessage();
+		}
+	}
+	
+	// return the response
+	echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+		<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">
+		<soapenv:Body>
+		   <soapenv:Fault>
+			  <faultcode>soapenv:Server.Exception</faultcode>
+			  <faultstring>{$response['message']}</faultstring>
+		   </soapenv:Fault>
+		</soapenv:Body>
+	 </soapenv:Envelope>";	
+}
+
+function mware_cp_bridge__middleware_functions_manager(){
+
+    $output = '
+    <html>
+        <head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+		<link href="https://fonts.googleapis.com/css?family=RobotoDraft" rel="stylesheet" type="text/css">
+		<link href="https://use.fontawesome.com/releases/v5.0.4/css/all.css" rel="stylesheet">
+		<style>
+		html,body,h1,h2,h3,h4,h5 {font-family: "RobotoDraft", "Roboto", sans-serif}
+		.w3-bar-block .w3-bar-item {padding: 16px}
+		</style>  
+            <title>Middleware Functions Manager</title>
+        </head>
+        <body class="w3-theme-15">
+            <ui-view></ui-view>
+            <script type="text/javascript" data-main="//cdn.mainone.net/SP/MiddlewareControlCenter/main.js" src="//cdn.mainone.net/bower_components/requirejs/require.js"></script>            
+        </body>        
+    </html>';
+
+    echo $output;
+    return;
+}
+
+function mware_cp_bridge__middleware_event_management(){
+
+    $output = '
+    <html>
+        <head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css"/>
+			<link href="https://fonts.googleapis.com/css?family=RobotoDraft" rel="stylesheet" type="text/css"/>
+			<link href="https://use.fontawesome.com/releases/v5.0.4/css/all.css" rel="stylesheet"/>
+			<link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css"/>
+			<style>
+				html,body,h1,h2,h3,h4,h5 {font-family: "RobotoDraft", "Roboto", sans-serif}
+				.w3-bar-block .w3-bar-item {padding: 16px}
+			</style>  
+            <title>Middleware Functions Manager</title>
+        </head>
+        <body class="w3-theme-15">
+            <ui-view></ui-view>
+            <script type="text/javascript" data-main="//cdn.mainone.net/SP/EventManagement/main.js" src="//cdn.mainone.net/bower_components/requirejs/require.js"></script>            
+        </body>        
+    </html>';
+
+    echo $output;
+    return;
+}
+
+function mware_cp_bridge__middleware_sof_print(){
+
+    $output = '
+    <html>
+        <head>
+            <meta charset="UTF-8"/>
+            <meta name="viewport" content="width=device-width, initial-scale=1"/>
+            <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css"/>
+            <link rel="stylesheet" href="https://www.w3schools.com/lib/w3-theme-blue-grey.css"/>
+            <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans"/>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"/>
+            <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/trix/0.9.2/trix.css"/>
+            <link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css"/>
+                                                 
+            <style type="text/css">
+                html,body,h1,h2,h3,h4,h5 {font-family: "Open Sans", sans-serif}
+                .hidden {display: none;}
+            </style>           
+        </head>
+        <body class="w3-theme-l5" id="{!opportunity}" is-production="true">
+            <apex:image styleClass="hidden logo MainOne" id="MainOneLogo" value="{!URLFOR($Resource.MainOneLogo)}" height="55"/>
+            <apex:image styleClass="hidden logo MDXI" id="MDXILogo" value="{!URLFOR($Resource.MDXILogo)}" height="55"/>
+            <ui-view></ui-view>
+            <script type="text/javascript" data-main="//cdn.mainone.net/SP/SOF/main.js" src="//cdn.mainone.net/bower_components/requirejs/require.js"></script>            
+        </body>        
+    </html>';
+
+    echo $output;
+    return;
+}
+
+/**
+ * Implement hook_menu().
+ */
+function mware_cp_bridge_menu() {
+	$items = array();
+	
+	// Link to cache update cron
+    $items['middleware-bridge/generate-report'] = [
+        'page callback' => 'mware_cp_bridge__generate_report'
+        , 'file' => 'crons/cron.generate-report.inc'
+        , 'page arguments' => ['internal']
+        , 'access arguments' => ['access content']
+        , 'type' => MENU_CALLBACK
+	];
+	
+    $items['middleware-bridge/ad-hoc-soap'] = [
+        'page callback' => 'mware_cp_bridge__process_soap'
+        // , 'file' => 'crons/cron.generate-report.inc'
+        // , 'page arguments' => ['internal']
+        , 'access arguments' => ['access content']
+        , 'type' => MENU_CALLBACK
+    ];
+	
+    $items['rest'] = [
+        'page callback' => 'mware_cp_bridge__process_rest'
+        // , 'file' => 'crons/cron.generate-report.inc'
+        // , 'page arguments' => ['internal']
+        , 'access arguments' => ['access content']
+        , 'type' => MENU_CALLBACK
+	];
+	
+    $items['soap'] = [
+        'page callback' => 'mware_cp_bridge__process_soap2'
+        // , 'file' => 'crons/cron.generate-report.inc'
+        // , 'page arguments' => ['internal']
+        , 'access arguments' => ['access content']
+        , 'type' => MENU_CALLBACK
+	];
+	
+	// mware_cp_bridge__process_soap2
+	
+    $items['middlware-bride/mail'] = [
+        'page callback' => 'mware_cp_bridge__process_email'
+		, 'file' => 'crons/cron.process-email.inc'
+		, 'title' => t('Process mail templates')
+        // , 'page arguments' => ['internal']
+        , 'access arguments' => ['access content']
+        , 'type' => MENU_CALLBACK
+	];
+	
+    $items['middlware-bridge/v8'] = [
+        'page callback' => 'mware_cp_bridge__run_v8_task'
+		, 'file' => 'crons/cron.execute-v8-task.inc'
+		, 'title' => t('Run v8 Tasks')
+        // , 'page arguments' => ['internal']
+        , 'access arguments' => ['access content']
+        , 'type' => MENU_CALLBACK
+    ];
+	
+    $items['admin/config/administration/mware/middleware-bridge-interfaces'] = [
+        'title' => 'SOAP',
+        'description' => 'Manage Interfaces',
+        'page callback' => 'drupal_get_form',
+        'page arguments' => ['mware_cp_bridge_form_ad_hoc_soap'],
+        'access arguments' => ['administer'],
+        'file' => 'forms/admin.inc',
+        'type' => MENU_LOCAL_TASK,
+    ];
+	
+    $items['admin/config/administration/mware/middleware-bridge-interfaces/soap'] = [
+        'title' => 'SOAP',
+        'description' => 'Manage Interfaces',
+        'page callback' => 'drupal_get_form',
+        'page arguments' => ['mware_cp_bridge_form_ad_hoc_soap'],
+        'access arguments' => ['administer'],
+        'file' => 'forms/admin.inc',
+        'type' => MENU_DEFAULT_LOCAL_TASK,
+    ];
+	
+    $items['admin/config/administration/mware/middleware-bridge-interfaces/rest'] = [
+        'title' => 'REST',
+        'description' => 'Manage REST Interfaces',
+        'page callback' => 'drupal_get_form',
+        'page arguments' => ['mware_cp_bridge_form_rest_interface'],
+        'access arguments' => ['administer'],
+        'file' => 'forms/admin.inc',
+        'type' => MENU_LOCAL_TASK,
+    ];
+	
+    $items['admin/config/administration/mware/middleware-bridge-interfaces/mail'] = [
+        'title' => 'MAIL',
+        'description' => 'Manage Interfaces',
+        'page callback' => 'drupal_get_form',
+        'page arguments' => ['mware_cp_bridge_form_mail_interface'],
+        'access arguments' => ['administer'],
+        'file' => 'forms/admin.inc',
+        'type' => MENU_LOCAL_TASK,
+	];
+	// mware_cp_bridge__middleware_functions_manager
+	
+    $items['admin/config/administration/mware/middleware-bridge-interfaces/manage-functions'] = [
+        'title' => 'ADVANCED',
+        'description' => 'Manage Interfaces',
+        'page callback' => 'mware_cp_bridge__middleware_functions_manager',
+        // 'page arguments' => ['mware_cp_bridge_form_mail_interface'],
+        'access arguments' => ['administer'],
+        // 'file' => 'forms/admin.inc',
+        'type' => MENU_LOCAL_TASK,
+	];
+
+	// mware_cp_bridge__middleware_event_management
+    $items['classique'] = [
+        'title' => 'Classique Events',
+        'description' => 'Manage Interfaces',
+        'page callback' => 'mware_cp_bridge__middleware_event_management',
+        // 'page arguments' => ['mware_cp_bridge_form_mail_interface'],
+        'access arguments' => ['access content'],
+        // 'file' => 'forms/admin.inc',
+        'type' => MENU_LOCAL_TASK,
+	];
+
+    return $items;
+}
+
+function mware_cp_bridge_cron(){
+    global $base_url;
+
+    $tokenOption = [
+        CURLOPT_SSLVERSION => CURL_SSLVERSION_TLSv1_2
+        , CURLOPT_PROTOCOLS => CURLPROTO_HTTPS
+        , CURLOPT_SSL_VERIFYPEER => FALSE
+        , CURLOPT_SSL_VERIFYHOST => 0
+        , CURLOPT_FOLLOWLOCATION => TRUE
+        , CURLOPT_HTTPPROXYTUNNEL => TRUE
+        , CURLOPT_VERBOSE => TRUE
+    ];
+	
+	mware_http_request("{$base_url}/middleware-bridge/generate-report", ['options' => $tokenOption, 'callback' => function($event){
+			
+	}]);
+	
+	mware_http_request("{$base_url}/middlware-bride/mail", ['options' => $tokenOption, 'callback' => function($event){
+			
+	}]);
+	
+	mware_http_request("{$base_url}/middlware-bridge/v8", ['options' => $tokenOption, 'callback' => function($event){
+			
+	}]);
+}
+
+function mware_cp_bridge_date_string_to_standard_date_string($value){
+	$date = mware_cp_bridge_date_string_to_date($value);
+	return $date->format('Y-m-d\TH:i:s');
+}
+
+function mware_cp_bridge_date_string_to_date($value){
+    $type_1 = '/^([\d]{4})\-([\d]{2})\-([\d]{2})T([\d]{2})\:([\d]{2})\:([\d]{2})$/';
+    $type_2 = '/^([\d]{4})\-([\d]{2})\-([\d]{2})T([\d]{2})\:([\d]{2})$/';
+    $type_3 = '/^([\d]{4})\-([\d]{2})\-([\d]{2})$/';
+
+    if (preg_match($type_3, $value) == 1) {
+        return \DateTime::createFromFormat('!Y-m-d', $value);
+    } else if (preg_match($type_2, $value) == 1) {
+        return \DateTime::createFromFormat('Y-m-d\TH:i', $value);
+    } else if (preg_match($type_1, $value) == 1) {
+        return \DateTime::createFromFormat('Y-m-d\TH:i:s', $value);
+    } else{
+        throw new \Exception("An error was encountered parsing the data string '{$value}'");
+    }
+}
+
+/**
+ * Implements hook_permission
+ * @return array
+ */
+function mware_cp_bridge_permission() {
+    $permission = [];
+
+    return $permission;
+}
+
+/**
+ * Implements hook_ctools_plugin_api
+ * @param type $owner
+ * @param type $api
+ * @return type
+ */
+function mware_cp_bridge_ctools_plugin_api($owner, $api) {
+    if ($owner == 'services' && $api == 'services') {
+        return [
+            'version' => 3,
+            'file' => 'resources.inc', // Optional parameter to indicate the file name to load.
+            'path' => drupal_get_path('module', 'mware_cp_bridge'), // If specifying the file key, path is required.
+        ];
+    }
+}
+
+function mware_cp_brige_get_period_information(array $params = []){
+	$periodStart = new \DateTime();
+	$periodEnd = new \DateTime();
+	$lastDayOfEndMonth = new \DateTime();
+	
+	$threemonths = new \DateInterval('P3M');
+	$onemonths = new \DateInterval('P1M');
+	$onesec = new \DateInterval('PT1S');
+	
+	// Use the provided start and end dates.
+	if(isset($params['startdate']) && isset($params['enddate'])){
+		$periodStart  = mware_cp_bridge_date_string_to_date($params['startdate']);
+		$periodEnd    = mware_cp_bridge_date_string_to_date($params['enddate']);
+
+		if($periodEnd < $periodStart){
+			throw new \Exception('Error: Invalid time range, the \'enddate\' must be greater than the \'startdate\'');
+		}
+		$m = intval($periodEnd->format('m'));
+		$year = $periodEnd->format('Y');
+
+		$lastDayYear = $m < 12 ? $year : $year + 1;
+		$lastDayMonth = $m < 12 ? $m + 1 : 1;
+		$lastDayOfEndMonth = \DateTime::createFromFormat('!Y-m H:i:s', "{$lastDayYear}-{$lastDayMonth} 00:00:00");
+		$lastDayOfEndMonth->sub($onesec);// $lastDayOfEndMonth->add($onemonths); 		
+	} 
+	// Otherwise, determine the start and end data based on the month and year.
+	else if(isset($params['month']) && isset($params['year'])) {
+		$month = intval($params['month']);
+		if($month < 1){
+			throw new \Exception('The month must be an integer ranging from 1 to 12');
+		}
+
+		$year = intval($params['year']);
+		if($year < 1){
+			throw new \Exception('The year must be a valid integer and greater than 0');
+		}
+
+		$periodStart = \DateTime::createFromFormat('!Y-m', "{$year}-{$month}");
+		$periodEnd = \DateTime::createFromFormat('!Y-m', "{$year}-{$month}");
+
+		$periodEnd->add($onemonths)->sub($onesec); 
+		$m = intval($periodEnd->format('m'));
+
+		$lastDayYear = $m < 12 ? $year : $year + 1;
+		$lastDayMonth = $m < 12 ? $m : 1;
+		$lastDayOfEndMonth = \DateTime::createFromFormat('!Y-m', "{$lastDayYear}-{$lastDayMonth}");
+		$lastDayOfEndMonth->add($onemonths)->sub($onesec);           
+	}
+	 
+	// Otherwise, determine the start and end data based on the quarter and year.
+	else if(isset($params['quarter']) && isset($params['year'])) {
+		$quarter = intval($params['quarter']);
+		if($quarter < 1 || $quarter > 4){
+			throw new \Exception('The quarter must be a valid integer ranging from 1 to 4');
+		}
+
+		$year = intval($params['year']);
+		if($year < 1){
+			throw new \Exception('The year must be a valid integer and greater than 0');
+		}
+
+		$month = 1;
+		switch($quarter){
+			case 2: $month = 4;
+			break;
+			case 3: $month = 7;
+			break;
+			case 4: $month = 10;
+		}
+
+		$periodStart = \DateTime::createFromFormat('!Y-m', "{$year}-{$month}");
+		$periodEnd = \DateTime::createFromFormat('!Y-m', "{$year}-{$month}");
+		$periodEnd->add($threemonths)->sub($onesec);   
+		$m = intval($periodEnd->format('m'));
+
+		$lastDayYear = $m < 12 ? $year : $year + 1;
+		$lastDayMonth = $m < 12 ? $m : 1;
+		$lastDayOfEndMonth = \DateTime::createFromFormat('!Y-m', "{$lastDayYear}-{$lastDayMonth}");
+		$lastDayOfEndMonth->add($onemonths)->sub($onesec);       
+	} 
+	// I can't help you
+	else {
+		throw new \Exception('Please specify a valid period.');
+	}
+
+	$duration = $periodEnd->diff($periodStart, TRUE);
+	$totalDuration = (intval($duration->format('%a'))*1440 + intval($duration->format('%i')));
+
+	// Prepare the basic report information.
+	$periodString = "{$periodStart->format('d-M-Y H:i:s')} - {$periodEnd->format('d-M-Y H:i:s')}"; // Assume monthly report
+	if($periodStart->format('d H:i:s') == '01 00:00:00' && $lastDayOfEndMonth->format('d H:i:s') == $periodEnd->format('d H:i:s')) {
+		if($periodStart->format('Y-m') == $periodEnd->format('Y-m')) {
+			$periodString = "{$periodStart->format('F')}, {$periodStart->format('Y')}";
+		} 
+		//Otherwise, if year is the same and months are different
+		else if($periodStart->format('Y') == $periodEnd->format('Y')){
+			$periodString = "{$periodStart->format('F')} - {$periodEnd->format('F')}, {$periodEnd->format('Y')}";
+		}
+		//Otherwise, if year is the same and months are different
+		else if($periodStart->format('Y') != $periodEnd->format('Y')){
+			$periodString = "{$periodStart->format('F')}, {$periodStart->format('Y')} - {$periodEnd->format('F')}, {$periodEnd->format('Y')}";
+		}
+	}
+	
+	$start = $periodStart->format('Y-m-d\TH:i:s');
+	$end = $periodEnd->format('Y-m-d\TH:i:s');
+	
+	return [
+		'StartDate'=> $start
+		, 'EndDate' => $end
+		, 'Period' => $periodString
+		, 'Duration' => $totalDuration
+		, 'PeriodStart' => $periodStart
+		, 'PeriodEnd' => $periodEnd
+	];
+}
+
+/**
+ * @author Kolade Ige <kolade.ige@mainone.net>
+ * @description Calculates down time duration for an outage
+ */
+function mware_cp_bridge_get_duration($vObj, $reportStart, $reportEnd){
+	//NOTE:
+	//$reportStart is zero-based
+	//Hold time is only considered if the incident started and ended in the same month :(
+	
+    //if incident start AND end date falls in the same month, return the duration as `downtime - holdtime`
+    $startTime = !is_null($vObj->StartTime)?(\DateTime::createFromFormat('Y-m-d\TH:i:s', $vObj->StartTime)):NULL;
+	$endTime = !is_null($vObj->ResolutionTime)?(\DateTime::createFromFormat('Y-m-d\TH:i:s', $vObj->ResolutionTime)):NULL;
+	
+	$onemonths = new \DateInterval('P1M');
+	$onesec = new \DateInterval('PT1S');
+
+	$duration = 0;
+
+	if((!is_null($startTime) && !is_null($endTime)) && $startTime->format('Y-m') == $endTime->format('Y-m')) {		
+		return $vObj->Downtime - (is_null($vObj->HoldTime)?0:$vObj->HoldTime);
+	}
+	
+	// If end date is empty AND incident start in the same month we're generating report for.
+	// OR
+	// If there is end date AND end month is greater than start month AND start month is the same as the month we're generating for.
+	else if(
+				((is_null($endTime) && !is_null($startTime)) && $startTime->format('Y-m') == $reportStart->format('Y-m'))
+				||
+				((!is_null($endTime) && !is_null($startTime)) && ($endTime > $startTime && $endTime->format('Y-m') != $startTime->format('Y-m')) && $startTime->format('Y-m') == $reportStart->format('Y-m'))
+	) {
+			// Get the last day of the month
+			$m = intval($startTime->format('m'));
+			$year = intval($startTime->format('Y'));
+			
+			$lastDayYear = $m < 12 ? $year : $year + 1;
+			$lastDayMonth = $m < 12 ? $m : 1;
+			$endOfStartMonth = \DateTime::createFromFormat('!Y-m', "{$lastDayYear}-{$lastDayMonth}");
+			$endOfStartMonth->add($onemonths)->sub($onesec);
+		
+			//duration will now be from start_date to endOfStartMonth		
+			$duration = $endOfStartMonth->diff($startTime);
+	}
+	
+	// If end date is empty AND incident start in a month prior to the month we're generating for.
+	// OR
+	// If there is end date AND end month is greater than start month AND end month is greater than the month we're generating for AND month we're generating for is greater than start month
+	// i.e. it spanned at least three months
+	else if(
+			(is_null($endTime) && !is_null($startTime)) && ($startTime->format('Y-m') != $reportStart->format('Y-m') && $startTime < $reportStart)
+				|| 
+			(!is_null($endTime) && !is_null($startTime)) && ($endTime > $startTime && $endTime->format('Y-m') != $startTime->format('Y-m')) && ($endTime > $reportEnd && $endTime->format('Y-m') != $reportEnd->format('Y-m')) && ($reportStart > $startTime && $reportStart->format('Y-m') != $startTime->format('Y-m'))
+	){
+		//duration will be from the beginning of the month we're generating for till the end of that month.
+		
+		$startOfMonthWeAreGeneratingFor = \DateTime::createFromFormat('!Y-m', "{$reportStart->format('Y-m')}");
+		$endOfMonthWeAreGeneratingFor = \DateTime::createFromFormat('!Y-m', "{$reportEnd->format('Y-m')}");
+		$endOfMonthWeAreGeneratingFor->add($onemonths)->sub($onesec);
+		
+		//duration will be from the beginning of the month we're generating for till the end of that month.
+		$duration = $endOfMonthWeAreGeneratingFor->diff($startOfMonthWeAreGeneratingFor);
+	}
+	
+	//if there is end date AND end month is greater than start month AND end month is the same month we are generating for
+	else if(
+		(is_null($endTime) && !is_null($startTime)) && ($endTime > $startTime && $endTime->format('Y-m') != $startTime->format('Y-m')) && ($endTime->format('Y-m') == $reportStart->format('Y-m'))
+	){
+		//duration will be from the beginning of the month we're generating for till the end_date.
+		$startOfMonthWeAreGeneratingFor = \DateTime::createFromFormat('!Y-m', "{$reportStart->format('Y-m')}");
+		
+		//duration will be from the beginning of the month we're generating for till the end_date.
+		$duration = $endTime->diff($startOfMonthWeAreGeneratingFor);
+	}
+	
+	else{
+		watchdog('CPRG', "{$vObj->CircuitID}".print_r($vObj, true));		
+		return 0;
+	}
+	
+	return (intval($duration->format('%a')) * 1440 + intval($duration->format('%i')));
+}

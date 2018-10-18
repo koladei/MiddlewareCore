@@ -1,0 +1,15 @@
+id: centerware_items
+plugin_id: centerware_items
+granularity: method
+methods: GET, POST
+configuration:
+  GET:
+    supported_formats:
+      - json
+    supported_auth:
+      - cookie
+  POST:
+    supported_formats:
+      - json
+    supported_auth:
+      - cookie
