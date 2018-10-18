@@ -1,7 +1,6 @@
 <?php
 
-require_once(__DIR__ . '/vendor/autoload.php');
-require_once(__DIR__ . '/functions/get_functions/middlewarefunctions.inc');
+namespace Drupal\middleware_core\MiddlewareCore\V8;
 
 use phpDocumentor\Reflection\DocBlockFactory;
 
@@ -23,16 +22,16 @@ class FriendlyException extends \Exception
 {
 }
 
-class MiddlewareV8Wrapper //extends \V8Js
+class V8Wrapper
 {
     private $service =  null;
     private $loader = null;
 
     public function __construct(\stdClass $service, callable $driverLoader = null, callable $logger = null)
     {
-        // parent::__construct('_$', []);
         $this->service = $service;
         $this->v8 = $this;
+        
         // $this->loader = $driverLoader;
         $this->loader = function () use ($driverLoader) {
             if (!is_null($driverLoader) && is_callable($driverLoader)) {
@@ -605,7 +604,7 @@ class MiddlewareV8Wrapper //extends \V8Js
 
                     if(count($functions) > 0){
                         $service = $functions[0];
-                        $wrapper = new MiddlewareV8Wrapper($service, $loader, $logger);
+                        $wrapper = new V8Wrapper($service, $loader, $logger);
     
                         $body = \json_decode(\json_encode($params), TRUE);
     
@@ -1852,7 +1851,9 @@ class MiddlewareV8Wrapper //extends \V8Js
          * @return boolean
          */
         $v8->isProduction = function () {
-            $environment_type = variable_get('MWARE_INSTANCE_TYPE', 'sandbox');
+            $config             = \Drupal::config('middleware_core.v8store');
+            $environment_type   = $config->get('MWARE_INSTANCE_TYPE');
+
             $return = ($environment_type == 'production'?true:false);
             return $return;
         };
@@ -1873,7 +1874,9 @@ class MiddlewareV8Wrapper //extends \V8Js
          * @return boolean
          */
         $v8->isSandbox = function () {
-            $environment_type = variable_get('MWARE_INSTANCE_TYPE', 'sandbox');
+            $config             = \Drupal::config('middleware_core.v8store');
+            $environment_type   = $config->get('MWARE_INSTANCE_TYPE');
+
             $return = ($environment_type == 'sandbox'?true:false);
             return $return;
         };
@@ -1894,7 +1897,9 @@ class MiddlewareV8Wrapper //extends \V8Js
          * @return boolean
          */
         $v8->isStaging = function () {
-            $environment_type = variable_get('MWARE_INSTANCE_TYPE', 'sandbox');
+            $config             = \Drupal::config('middleware_core.v8store');
+            $environment_type   = $config->get('MWARE_INSTANCE_TYPE');
+
             $return = ($environment_type == 'staging'?true:false);
             return $return;
         };
@@ -1915,7 +1920,10 @@ class MiddlewareV8Wrapper //extends \V8Js
          * @return string
          */
         $v8->getInstanceType = function () {
-            return variable_get('MWARE_INSTANCE_TYPE', 'sandbox');
+            $config             = \Drupal::config('middleware_core.v8store');
+            $environment_type   = $config->get('MWARE_INSTANCE_TYPE');
+
+            return $environment_type;
         };
 
         /*
@@ -2048,7 +2056,9 @@ class MiddlewareV8Wrapper //extends \V8Js
          */
         $v8->storeValue = function ($key, $value)
         {
-            variable_set("v8__{$key}", $value);
+            $config             = \Drupal::service('config.factory')->getEditable('middleware_core.v8store');
+            $environment_type   = $config->set("v8__{$key}", $value)->save();
+
             return $this;
         };
 
@@ -2061,7 +2071,10 @@ class MiddlewareV8Wrapper //extends \V8Js
          */
         $v8->retrieveValue = function ($key, $default = null)
         {
-            return variable_get("v8__{$key}", $default);
+            $config  = \Drupal::config('middleware_core.v8store');
+            $value   = $config->get("v8__{$key}");
+
+            return $value;
         };  
 
         /**
@@ -2073,7 +2086,10 @@ class MiddlewareV8Wrapper //extends \V8Js
          */
         $v8->removeValue = function ($key, $default = null)
         {
-            return variable_del("v8__{$key}");
+            $config  = \Drupal::service('config.factory')->getEditable('middleware_core.v8store');
+            $config->clear("v8__{$key}")->save();
+
+            return;
         };    
 
         $v8->getDoc = function ($method) use($v8) {

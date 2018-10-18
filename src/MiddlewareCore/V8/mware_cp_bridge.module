@@ -1,11 +1,11 @@
 <?php
 
 module_load_include('module', 'mware');
-include_once str_replace('/', DIRECTORY_SEPARATOR, __DIR__ . '/MiddlewareV8Wrapper.php');
+include_once str_replace('/', DIRECTORY_SEPARATOR, __DIR__ . '/V8Wrapper.php');
 
 require_once 'functions/functions.inc';
 require_once 'forms/admin.inc';
-// use com\mainone\middleware\bridge\MiddlewareV8Wrapper as MiddlewareV8Wrapper;
+// use com\mainone\middleware\bridge\V8Wrapper as V8Wrapper;
 
 
 function mware_cp_bridge__process_soap(){
@@ -30,7 +30,7 @@ function mware_cp_bridge__process_soap(){
 						, 'trace' => 1
 					]);
 			
-					$server->setClass('MiddlewareV8Wrapper', $service, function(){
+					$server->setClass('V8Wrapper', $service, function(){
 						return mware_connection_driver__get_driver(...func_get_args());
 					}, function(){
 						return watchdog(...func_get_args());
@@ -142,7 +142,7 @@ function mware_cp_bridge__process_rest(){
 					}
 
 					// Initialize the script processor.
-					$wrapper = new MiddlewareV8Wrapper($service, function(){
+					$wrapper = new V8Wrapper($service, function(){
 						return mware_connection_driver__get_driver(...func_get_args());
 					}, function(){
 						return watchdog(...func_get_args());
@@ -286,7 +286,7 @@ function mware_cp_bridge__process_soap2(){
 							]);
 					
 							// echo '' . $service->Logic;
-							$server->setClass('MiddlewareV8Wrapper', $service, function(){
+							$server->setClass('V8Wrapper', $service, function(){
 								return mware_connection_driver__get_driver(...func_get_args());
 							}, function(){
 								return watchdog(...func_get_args());
