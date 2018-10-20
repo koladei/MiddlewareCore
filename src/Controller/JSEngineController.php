@@ -48,7 +48,6 @@ class JSEngineController extends ControllerBase {
                         return middleware_core__get_driver(...func_get_args());
                     }, function($title, $message){
                         \Drupal::logger("{$title}")->log(RfcLogLevel::NOTICE, $message, []);
-                        // return watchdog(...func_get_args());
                     });
 
                     $headers = get_object_vars($request->headers);
