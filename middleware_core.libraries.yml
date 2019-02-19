@@ -1,0 +1,11 @@
+configuration.systems:
+  version: 1.x
+  css:
+    theme:
+      css/configuration.systems.css: {}
+
+configuration.system:
+  version: 1.x
+  css:
+    theme:
+      css/configuration.system.css: {}

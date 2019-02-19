@@ -1,0 +1,17 @@
+[data-drupal-selector="edit-actions"]{
+    display: none;
+}
+
+@media screen and (min-width: 700px) {
+    [data-drupal-selector="edit-add-system"]{
+        max-width: 20vw;
+        float:left;
+        margin: 0px 0px 0px 10px !important;
+        padding: 0px;
+    }
+
+    [data-drupal-selector="edit-table"] {
+        max-width: calc(70vw - 10px);
+        float: left;
+    }
+}

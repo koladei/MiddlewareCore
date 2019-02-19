@@ -1,0 +1,20 @@
+@media screen and (min-width: 700px) {
+    [data-drupal-selector="edit-system-info"]{
+        max-width: 50%;
+        float:left;
+        margin: 0px 0px 0px 0px;
+        padding: 0px;
+    }
+
+    [data-drupal-selector="edit-settings"] {
+        max-width: calc(50% - 10px);
+        margin: 0px;
+        margin-left: 10px !important;
+        float: left;
+    }
+
+    [data-drupal-selector="edit-actions"] {
+        float: left;
+        width: 100vw;
+    }
+}

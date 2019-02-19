@@ -20,38 +20,7 @@ class RouteProvider {
   public function routes() {
     $routes = [];
 
-    
-    // try {
-    //   $driver = middleware_core__get_driver('sql');
-    //   if($driver){        
-    //     $x = $driver->getItems('code_base', 'URL,Name,Logic', '', '');
-    //     foreach($x as $code_path){
-    //       $routes["middleware_core.{$code_path->Name}"] = new Route(
-    //         // Path to attach this route to:
-    //         "rest/{$code_path->URL}",
-    //         // Route defaults:
-    //         [
-    //           '_controller' => '\Drupal\middleware_core\Controller\JSEngineController::response',
-    //           '_title' => $code_path->Name
-    //         ],
-      
-    //         // Route requirements:
-    //         [
-    //           '_permission'  => 'access content',
-    //         ]
-    //       );
-    //     }
-    //   } else {
-    //     throw new \Exception("Unable to find a matching driver for '{$system}'");
-    //   }
-    // } catch (\Exception $exp) {
-    //   $response ['status'] = 'failure';
-    //   $response ['message'] = $exp->getMessage();
-    //   $response['d'] = [];
-    // }
-
-    // Declares a single route under the name 'example.content'.
-    // Returns an array of Route objects. 
+    // This route leads to the JS REST controller
     $routes['middleware_core.rest'] = new Route(
       // Path to attach this route to:
       '/rest/{middlware_core_path}',
@@ -69,7 +38,68 @@ class RouteProvider {
       ]
     );
 
-    $routes['middleware_core.rest']->setRequirement('middlware_core_path','^[^\?]*$');
+    // This is route leads to the object schema form
+    $routes['middleware_core.systems'] = new Route(      
+      '/_systems',
+
+      [
+        '_title' => 'System List',
+        '_form' => '\Drupal\middleware_core\Form\SystemConfigListForm'
+      ],
+  
+      [
+        '_permission'=> 'access content'
+      ]      
+    );
+
+    // This is route leads to the object schema form
+    $routes['middleware_core.system'] = new Route(      
+      '/_systems/{system_id}',
+
+      [
+        '_title' => 'Manage System',
+        '_form' => '\Drupal\middleware_core\Form\SystemConfigForm'
+      ],
+  
+      [
+        'system_id' => '^[\w\d]*$',
+        '_permission'=> 'access content'
+      ]      
+    );
+
+    // This is route leads to the object schema form
+    $routes['middleware_core.object_schema'] = new Route(      
+      '/_systems/{system_id}/objects/{object_id}',
+
+      [
+        '_title' => 'Manage Object Schema',
+        '_form' => '\Drupal\middleware_core\Form\ObjectSchemaForm'
+      ],
+  
+      [
+        'system_id' => '^[\w\d]*$',
+        'object_id' => '^[\w\d]*$',
+        '_permission'=> 'access content'
+      ]      
+    );
+
+    // // This is route leads to the object schema form
+    // $routes['middleware_core.field_systems'] = new Route(      
+    //   '/_systems/{system_id}/objects/{object_id}/fields/{fields_id}',
+    //   [
+    //     '_title' => 'Example form',
+    //     '_form' => '\Drupal\middleware_core\Form\FieldSchemaForm'
+    //   ],
+  
+    //   [
+    //     'system_id' => '^[\w\d]*$',
+    //     'object_id' => '^[\w\d]*$',
+    //     'field_id' => '^[\w\d]*$',
+    //     '_permission'=> 'access content'
+    //   ]      
+    // );
+
+    // $routes['middleware_core.rest']->setRequirement('middlware_core_path','^[^\?]*$');
 
     \Drupal::service('router.builder')->setRebuildNeeded();
     return $routes;
