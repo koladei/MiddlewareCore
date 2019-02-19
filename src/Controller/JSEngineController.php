@@ -7,7 +7,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Drupal\middleware_core\MiddlewareCore\V8\V8Wrapper;
-use Drupal\Core\Logger\RfcLogLevel;
+use Drupal\middleware_core\MiddlewareCore\Utility\Functions;
 
 /**
  * Controller routines for test_api routes.
@@ -42,39 +42,46 @@ class JSEngineController extends ControllerBase {
 
             if(count($matches) > 0) {
                 $c = $matches[0];
+                $body = NULL;
 
                 try {
-                    $wrapper = new V8Wrapper($c, function(){
-                        return middleware_core__get_driver(...func_get_args());
-                    }, function($title, $message){
-                        \Drupal::logger("{$title}")->log(RfcLogLevel::NOTICE, $message, []);
-                    });
+                    $loader = function(){
+                        return Functions::GetMiddlewareDriver(...\func_get_args());
+                    };
 
-                    $headers = get_object_vars($request->headers);
+                    $logger = function(){
+                        return Functions::Log(...\func_get_args());
+                    };
                     
-                    // Try converting to JSON
-                    $body = NULL;
+                    $wrapper = new V8Wrapper($c, $loader, $logger);
+
+                    $headers = ($request->headers->all());
 
                     // Try converting to JSON	
-                    if(!isset($headers['content-type']) || isset($headers['content-type']) && in_array('application/json', explode(';', $headers['content-type']))){
-                        $body = json_decode($request->getContent());					
+                    if(!isset($headers['content-type']) || isset($headers['content-type']) && in_array('application/json', $headers['content-type'])){
+                        $body = json_decode($request->getContent(), true);
                     }
                     else { 
                         $body = $request->getContent();
                     }
 
+                    $uri = $request->getRequestUri();
+                    $pathParams = explode('/', substr($uri, strpos($uri, $c->URL) + strlen($c->URL) + 1));
+
                     $return = $wrapper->{$_SERVER['REQUEST_METHOD']}([
                         'BODY' => $body
-                        , 'PATH' => $params
+                        , 'PATH' => implode('/', $params)
+                        , 'PATH_PARAMS' => $pathParams
+                        , 'CONTROLLER_PATH' => $c->URL
                         , 'HEADERS' => $headers
-                        , 'BASE_URL' => $request->getBaseUrl()
+                        , 'BASE_URL' => $request->getSchemeAndHttpHost()
                         , 'CURRENT_USER' => \Drupal::currentUser()
                         , 'CLEANER' => function(&$response) use(&$p_arg){
                             $p_arg = array_merge($p_arg, $response);						
                         }
                     ], function(&$response) use(&$p_arg){
                         $p_arg = !is_array($p_arg)?[]:$p_arg;
-                        $p_arg = array_merge($p_arg, $response);						
+                        $p_arg = array_merge($p_arg, $response);
                     });
 
                     // return the response
