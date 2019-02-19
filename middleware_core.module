@@ -1,15 +1,22 @@
 <?php
 
+use Drupal\middleware_core\MiddlewareCore\Cron\Cron;
+
 /**
  * @file
+ * @author Kolade Ige <kolade.ige@gmail.com>
+ * 
  * Middleware module.
  */
 
-// \Drupal::service("router.builder")->rebuild();
 function middleware_core__get_driver($driver_name)
 {
     $data = [];
-    Drupal::moduleHandler()->alter(['connection_driver', 'connection_driver_' . $driver_name], $data);
+    Drupal::moduleHandler()->alter(['connection_driver', "connection_driver_{$driver_name}"], $data);
     
     return isset($data[$driver_name])?$data[$driver_name]: false;
+}
+
+function middleware_core_cron(){    
+    Cron::run();
 }
